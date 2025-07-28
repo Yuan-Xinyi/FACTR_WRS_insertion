@@ -6,12 +6,9 @@ cameras_topics:
   - /camera_1/rgb/image_raw
 
 obs_topics:
-  - /joint_states
   - /joint_external_torque
-  # - /gripper/state
-  # - /robot/end_effector_pose
+  - /gripper/state
 
-# 暂时注释掉，等你有 cmd topic 再启用
-# action_config:
-#   /franka/cmd_joint_positions: 7
-#   /gripper/cmd_position: 1
+action_config:
+  /joint_states: 7
+  /gripper/state: 1

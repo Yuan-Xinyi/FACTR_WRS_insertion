@@ -35,42 +35,95 @@ def main(cfg: DictConfig):
     
     rgb_obs_topics = list(cfg.cameras_topics)
     state_obs_topics = list(cfg.obs_topics)
+    action_config = dict(cfg.action_config)
+    action_topics = list(action_config.keys())
     
     assert len(state_obs_topics) > 0, "Require low-dim observation topics"
     assert len(rgb_obs_topics) > 0, "Require visual observation topics"
-
+    assert len(action_topics) > 0, "Require visual observation topics"
+    
+    
     data_folder = Path(input_path)
     output_dir = Path(output_path)
     output_dir.mkdir(exist_ok=True, parents=True)
 
-    all_topics = state_obs_topics + rgb_obs_topics
+    # initialize topics
+    all_topics = state_obs_topics + rgb_obs_topics + action_topics
+    
     all_episodes = sorted([f for f in data_folder.iterdir() if f.name.startswith('trajectory_') and f.name.endswith('.pkl')])
     
     trajectories = []
     all_states = []
-
+    all_actions = []
     pbar = tqdm(all_episodes)
     for episode_pkl in pbar:
         with open(episode_pkl, 'rb') as f:
             full_data = pickle.load(f)
-
-        # ✅ 跳过同步步骤，直接用你预同步的 data 字典
+        # traj_data, avg_freq = sync_data_slowest(traj_data, all_topics)
+        # pbar.set_postfix({'avg_freq': f'{avg_freq:.1f} Hz'})
         traj_data = full_data['data']
 
         traj = {}
-        num_steps = len(traj_data[state_obs_topics[0]])
+        num_steps = len(traj_data[action_topics[0]])
+        print(f"Processing {episode_pkl.name} with {num_steps} steps")
         traj['num_steps'] = num_steps
 
-        # ✅ 拼接状态向量
-        traj['states'] = np.concatenate([np.array(traj_data[topic]) for topic in state_obs_topics], axis=-1)
-        all_states.append(traj['states'])
+        # ------------------------ Process observation ------------------------
+        # traj['states'] = np.concatenate([np.array(traj_data[topic]) for topic in state_obs_topics], axis=-1)
+        processed_state_arrays = []
+        num_steps = len(traj_data[state_obs_topics[0]])  # 假设第一个 topic 是正常的时间序列
 
-        # ✅ 图像处理（resize 和压缩）
+        for topic in state_obs_topics:
+            data = traj_data[topic]
+
+            # special case for grasp state: deal with boolean values
+            if isinstance(data, list) and isinstance(data[0], dict):
+                key = list(data[0].keys())[0]  # 默认只取第一个 key
+                print(f"[Fix] topic '{topic}' is list of dicts, extracting '{key}'")
+                data = [int(d[key]) if isinstance(d[key], bool) else d[key] for d in data]
+
+            arr = np.array(data)
+            if arr.ndim == 1: arr = arr.reshape(-1, 1)
+            if arr.shape[0] != num_steps:
+                print(f"[Warning] topic '{topic}' has shape {arr.shape}, expected T={num_steps}, skipping.")
+                continue
+            processed_state_arrays.append(arr)
+        traj['states'] = np.concatenate(processed_state_arrays, axis=-1)[:-1]
+        traj['num_steps'] = len(traj['states'])
+
+
+        # ------------------------ Process action ------------------------
+        processed_action_arrays = []
+
+        for topic in action_topics:
+            data = traj_data[topic]
+
+            # special case: list of dicts, extract value and convert bool to 0/1
+            if isinstance(data, list) and isinstance(data[0], dict):
+                key = list(data[0].keys())[0]
+                print(f"[Fix] action topic '{topic}' is list of dicts, extracting '{key}'")
+                data = [int(d[key]) if isinstance(d[key], bool) else d[key] for d in data]
+
+            arr = np.array(data)
+            if arr.ndim == 1: arr = arr.reshape(-1, 1)
+            if arr.shape[0] != num_steps:
+                print(f"[Warning] topic '{topic}' has shape {arr.shape}, expected T={num_steps}, skipping.")
+                continue
+            processed_action_arrays.append(arr)
+
+        traj['actions'] = np.concatenate(processed_action_arrays, axis=-1)[1:]  # shift one step
+        traj['num_steps'] = len(traj['actions'])
+
+        
+        all_states.append(traj['states'])
+        all_actions.append(traj["actions"])
+        
         for cam_ind, topic in enumerate(rgb_obs_topics):
             raw_images = traj_data[topic]  # 每步是 (480, 640, 3)
             processed_images = [process_rgb_image(img) for img in raw_images]
             traj[f'enc_cam_{cam_ind}'] = processed_images
 
+            '''only for visualization the processed images'''
             # import cv2
             # for i in range(min(3, len(processed_images))):
             #     img_bytes = processed_images[i]
@@ -78,32 +131,31 @@ def main(cfg: DictConfig):
             #     cv2.imshow(f"Camera {cam_ind} - Frame {i}", img_array)
             #     cv2.waitKey(0)  # 等待按键
             # cv2.destroyAllWindows()
-
         trajectories.append(traj)
-
-    # ✅ 状态归一化
+        
+    # normalize states and actions
     state_norm_stats = gaussian_norm(all_states)
-    norm_stats = dict(state=state_norm_stats)
-
-    # ✅ 生成无动作的 robobuf
+    action_norm_stats = gaussian_norm(all_actions)
+    norm_stats = dict(state=state_norm_stats, action=action_norm_stats)
+    
+    # dump data buffer
     buffer_name = "buf"
-    buffer = generate_robobuf(trajectories, include_action=False)
+    buffer = generate_robobuf(trajectories)
     with open(output_dir / f"{buffer_name}.pkl", "wb") as f:
         pickle.dump(buffer.to_traj_list(), f)
-
-    # ✅ 保存配置（无 action）
+    
+    # dump rollout config
     obs_config = {
         'state_topics': state_obs_topics,
         'camera_topics': rgb_obs_topics,
     }
     rollout_config = {
         'obs_config': obs_config,
-        'action_config': None,
+        'action_config': action_config,
         'norm_stats': norm_stats
     }
     with open(output_dir / "rollout_config.yaml", "w") as f:
         yaml.dump(rollout_config, f, sort_keys=False)
-
         
 if __name__ == "__main__":
     main()

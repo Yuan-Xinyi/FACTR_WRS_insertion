@@ -5,10 +5,10 @@
 CUDA_DEVICE_ID=0
 
 # task configuration, setup under cfg/task/
-task_config=single_franka
+task_config=pick_cylinder 
 
 # path to dataset buffer
-buffer_path=$(pwd)/processed_data/test/buf.pkl
+buffer_path=$(pwd)/processed_data/0728/buf.pkl
 
 # curriculum parameters
 space_config=pixel # pixel, latent

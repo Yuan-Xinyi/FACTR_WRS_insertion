@@ -4,7 +4,7 @@ import cv2
 from bisect import bisect_left
 
 # ========================= 配置 =========================
-PKL_PATH = "factr_teleop/raw_data/trajectory_20250728_105347_0001.pkl"
+PKL_PATH = "factr_teleop/raw_data/0728/trajectory_20250728_105347_0001.pkl"
 TIMESTAMP_TOL = 0.02  # 对齐容差（秒）
 FPS = 50       # 播放帧率
 # =======================================================

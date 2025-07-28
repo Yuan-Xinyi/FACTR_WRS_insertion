@@ -39,12 +39,11 @@ def gaussian_norm(list_of_array):
     )
     return normalization_stats
 
-def generate_robobuf(trajectories):
+def generate_robobuf(trajectories, include_action=True):
     buffer = ReplayBuffer()
     for traj in trajectories:
         num_steps = traj['num_steps']
         states = traj['states']
-        has_action = 'actions' in traj  # ✅ 自动判断是否有动作
         actions = traj.get('actions', None)
 
         for i in range(num_steps):
@@ -55,11 +54,10 @@ def generate_robobuf(trajectories):
 
             transition = Transition(
                 obs=ObsWrapper(obs),
-                action=actions[i] if has_action else None,
+                action=actions[i] if include_action and actions is not None else None,
                 reward=(i == num_steps - 1),
             )
             buffer.add(transition, is_first=(i == 0))
-
     return buffer
 
 
