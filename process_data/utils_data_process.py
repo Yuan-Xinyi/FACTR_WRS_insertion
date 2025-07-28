@@ -43,23 +43,25 @@ def generate_robobuf(trajectories):
     buffer = ReplayBuffer()
     for traj in trajectories:
         num_steps = traj['num_steps']
-        actions = traj['actions']
         states = traj['states']
+        has_action = 'actions' in traj  # ✅ 自动判断是否有动作
+        actions = traj.get('actions', None)
+
         for i in range(num_steps):
-            obs = {
-                'state': states[i],
-            }
+            obs = {'state': states[i]}
             for k, v in traj.items():
                 if k.startswith('enc_cam_'):
                     obs[k] = v[i]
+
             transition = Transition(
-                obs = ObsWrapper(obs), 
-                action = actions[i], 
-                reward = (i==num_steps-1), 
+                obs=ObsWrapper(obs),
+                action=actions[i] if has_action else None,
+                reward=(i == num_steps - 1),
             )
-            buffer.add(transition, is_first = (i==0))
+            buffer.add(transition, is_first=(i == 0))
 
     return buffer
+
 
 def get_diff_timestamps(timestamps):
     timestamps = np.array(timestamps)
@@ -99,4 +101,12 @@ def process_image(img_enc):
     decoded_image = process_decoded_image(decoded_image)
     encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 50]
     _, compressed_image = cv2.imencode('.jpg', decoded_image, encode_param)
+    return compressed_image
+
+def process_rgb_image(img):
+    # 直接 resize 原图 (480, 640, 3) → (256, 256, 3)
+    resized_image = cv2.resize(img, (256, 256))
+    
+    # 可选压缩（保存为字节流）
+    _, compressed_image = cv2.imencode('.jpg', resized_image, [int(cv2.IMWRITE_JPEG_QUALITY), 50])
     return compressed_image

@@ -2,6 +2,7 @@
 build
 install
 log
+*.pkl
 
 # python
 __pycache__/

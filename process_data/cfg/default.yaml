@@ -1,12 +1,17 @@
-
-input_path: ../factr_teleop/raw_data/test
-output_path: processed_data/test
+input_path: factr_teleop/raw_data/0728
+output_path: processed_data/0728
 
 cameras_topics:
-- /zed/front/im_left
+  - /camera_0/rgb/image_raw
+  - /camera_1/rgb/image_raw
+
 obs_topics:
-- /franka/right/obs_franka_torque
-- /gripper/right/obs_gripper_pos
-action_config:
-  /factr_teleop/right/cmd_franka_pos: 7
-  /factr_teleop/right/cmd_gripper_pos: 1
+  - /joint_states
+  - /joint_external_torque
+  # - /gripper/state
+  # - /robot/end_effector_pose
+
+# 暂时注释掉，等你有 cmd topic 再启用
+# action_config:
+#   /franka/cmd_joint_positions: 7
+#   /gripper/cmd_position: 1
